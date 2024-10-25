@@ -1,0 +1,19 @@
+git clone <repository>
+
+git status
+
+git add <filename>
+
+git checkout <branch_name>
+
+git checkout -b <branch_name>
+
+git commit -m "commit_message"
+
+git stash
+
+git stash apply
+
+git log
+
+git push -f origin
