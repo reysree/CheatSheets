@@ -1,5 +1,9 @@
 git clone <repository>
 
+git remote add origin <repository>
+
+git branch -m master main
+
 git status
 
 git add <filename>
