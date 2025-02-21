@@ -8,3 +8,17 @@ docker ps -a --> shows all active and inactive containers
 docker ps --> shows only the active containers
 
 docker run -p 8080:8080 --name backend-app springboot-app --> running the docker image with name sprinboot-app and naming the container as backend-app. --name defined the name of the container
+
+----------------------------------------
+
+Pushing Docker image to docker hub
+
+docker tag springboot-app docker-hub-username/springboot-app:v1 --> here :v1 represents the tag of the image. if not tag is mentioned then the default tag is :latest.
+
+docker push dockerhub-username/springboot-app:v1
+
+----------------------------------------
+
+Pulling the Docker image from docker hub
+
+docker pull dockerhub-username/springboot-app:v1 --> if you dont mention the tag name when pulling the image, the default image pulled is :latest 
