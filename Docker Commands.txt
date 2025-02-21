@@ -1,0 +1,10 @@
+docker run -p 8080:8080 springboot-app  --> -p does container's port mapping to host's port and name of the container is springboot-app
+
+docker build -t springboot-app --> builds the springboot application using the Dockerfile content and -t gives tag for the image and that is springboot-app
+
+docker rm springboot-app --> deletes the container with name springboot-app
+docker stop springboot-app --> stops the container with tag name springboot-app
+docker ps -a --> shows all active and inactive containers
+docker ps --> shows only the active containers
+
+docker run -p 8080:8080 --name backend-app springboot-app --> running the docker image with name sprinboot-app and naming the container as backend-app. --name defined the name of the container
