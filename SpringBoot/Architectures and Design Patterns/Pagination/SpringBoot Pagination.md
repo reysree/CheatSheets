@@ -143,5 +143,3 @@ GET /users?country=India&page=0&size=5&sort=name,asc
 ```
 
 ---
-
-Let me know if you want to also support filtering + pagination + sorting in one elegant API! 🎉
