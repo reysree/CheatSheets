@@ -1,0 +1,28 @@
+---
+description: When the user is learning a topic, save study notes as simple snake_case .md files under a topic folder.
+alwaysApply: true
+---
+
+# Learning notes
+
+When the user indicates they are **learning**, **studying**, or **revising** something (e.g. “I’m learning about Claude”, “study notes for X”, “help me revise Y for interviews”), treat this as a request to capture or extend **structured study notes** in this repo.
+
+## Where to put files
+
+1. **Topic folder**: Create or use a folder at the repo root named after the topic, **PascalCase** (e.g. `Claude/`, `Kafka/`). Multi-word folder names: short and filesystem-safe (e.g. `SystemDesign/` or `Large-Language-Models/`). For **Claude API / SDK** cheat sheets, prefer **`Claude/Accessing-Claude-with-API/`** (keep **`Claude/course_video_reference.md`** at the `Claude/` root).
+2. **File name**: **snake_case** `.md` files that describe the content, e.g. `overview_claude_models.md`, `prompting_basics.md`, `api_usage.md`. One file per focused subtopic. If a matching file already exists, **prefer updating it** with new sections instead of duplicating.
+
+## Content style
+
+Write for **revision** and **interviews/tasks**:
+
+- Clear **headings** (Overview, Core ideas, How it works, Trade-offs, Pitfalls, Interview angles, Quick recap).
+- **Bullets** and **tables** where helpful.
+- **Quick recap** at the end when the note is long enough to warrant it.
+- Be **accurate**; flag uncertainty.
+
+## Actions
+
+- Create folders/files as needed using the naming above.
+- Summarize and reorganize pasted material; don’t dump raw chat unless asked.
+- Match style of other `.md` files in the same topic folder when present.
