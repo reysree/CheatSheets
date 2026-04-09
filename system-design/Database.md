@@ -25,11 +25,26 @@ Splitting data across multiple database instances based on a **shard key** (the 
 - User 100's tweets → hash(100) → shard 5
 - On read: hash the user_id, go directly to that shard
 
-### Shard key selection
-Bad shard key → **hot shard** (one shard overloaded, others idle).
-Example: sharding by country when 80% of users are in one country.
+### Range-based vs Hash-based sharding
 
-Good shard key = high cardinality + even distribution.
+**Range-based sharding**: Shard by ranges of the shard key.
+- User IDs 1–1M → shard 1, 1M–2M → shard 2, and so on
+- Pros: range queries are fast — "give me all users between 500k and 600k" hits one shard
+- Cons: if most data falls in one range, that shard becomes a hot shard
+
+**Hash-based sharding**: Hash the shard key, map the hash to a shard.
+- hash(user_id=42) → shard 3
+- Pros: distributes data evenly, avoids hot shards
+- Cons: range queries scatter across all shards — can't efficiently ask for "users between 500k and 600k"
+
+**Trade-off**: Range-based for good range query performance but uneven distribution. Hash-based for even distribution but bad range queries.
+
+### Consistent hashing
+Used to minimize data movement during resharding.
+
+Normal resharding: add a new shard → rehash every key → redistribute most of your data. Painful.
+
+Consistent hashing: imagine the hash space as a ring. Each shard owns a section of the ring. When you add a new shard, only the keys falling in the new shard's section move — the rest stay put. Adding one shard impacts roughly 1/N of your data instead of everything.
 
 ### Hot shard problem
 When a celebrity user (e.g. 100M followers) hammers one shard with reads/writes.
@@ -55,22 +70,70 @@ Now query the index first → scatter only to relevant shards.
 When data grows and you need more shards, you redistribute data. Operationally painful.
 Use **consistent hashing** to minimize data movement during resharding.
 
+### Partitioning vs Sharding
+- **Partitioning** is the broader term — splitting data across storage units
+- **Sharding** = horizontal partitioning across multiple machines (what we care about in system design)
+- **Vertical partitioning** = splitting columns across machines (rare in interviews)
+
 ---
 
 ## 2. Replication
 
 ### What is it?
-One **primary** database accepts all writes. Multiple **replicas** (exact copies) handle reads. Every write to the primary gets replicated asynchronously to all replicas.
+One **primary** database accepts all writes. Multiple **replicas** (exact copies) handle reads. Every write to the primary gets replicated to all replicas.
 
 ### Why it matters
-Solves the **read scaling** problem. Doesn't solve the write scaling problem (all writes still go to primary).
+Solves the **read scaling** problem. Does NOT solve the write scaling problem (all writes still go to primary).
+
+### Synchronous vs Asynchronous replication
+
+**Asynchronous replication** (most common):
+- Primary writes data and returns success immediately, without waiting for replicas
+- Replicas catch up in the background
+- Pros: low write latency
+- Cons: if primary crashes before replicating, that data is lost
+
+**Synchronous replication**:
+- Primary waits for at least one replica to acknowledge the write before returning success
+- Pros: guaranteed durability — no data loss on primary crash
+- Cons: slower writes — you're waiting for a network round trip to a replica
+
+**Semi-synchronous** (best of both):
+- Wait for one replica to acknowledge, then return success
+- Most production systems use this — balances safety and speed
 
 ### Replication lag
-Asynchronous replication means replicas may be milliseconds to seconds behind the primary.
+Async replication means replicas may be milliseconds to seconds behind the primary.
 
 **Rule of thumb:**
 - Read from replica: analytics, feeds, background jobs — anything tolerating slight staleness
 - Read from primary: immediately after a write, or for critical consistency (e.g. payment confirmation)
+
+### Leader election
+What happens when the primary goes down?
+
+Replicas need to elect a new primary automatically. This is called **leader election**.
+
+**How it works (Raft algorithm):**
+1. Replicas constantly heartbeat with the primary
+2. If replicas don't hear from primary within a timeout period, they trigger an election
+3. Replicas vote — the replica with the most up-to-date data wins
+4. Winner becomes the new primary and starts accepting writes
+
+**Risk — split-brain**: two replicas simultaneously think they are primary and start accepting writes independently, causing data divergence. Prevented by requiring a majority quorum to elect a leader.
+
+**In practice**: PostgreSQL uses tools like Patroni + etcd for automatic leader election.
+
+### Multi-primary replication
+Allows writes to multiple primaries simultaneously. Each primary replicates to others.
+
+**Problem**: conflicts — if two primaries write different values to the same key at the same time, which one wins?
+
+**Conflict resolution strategies:**
+- Last-write-wins (by timestamp)
+- Vector clocks (track causality to resolve conflicts)
+
+Use cases are narrow — distributed caches, specific geo-distributed setups. Generally avoided due to complexity.
 
 ### Sharding + Replication together
 This is how you scale both reads and writes:
@@ -107,14 +170,8 @@ Write returns immediately after hitting primary. Replicas catch up asynchronousl
 Middle ground: after you write something, you can immediately read it back. But other users may see stale data briefly.
 - Used by Twitter, most social platforms
 
-### When to use strong consistency
-Only for a small subset of critical data:
-- Payment balances
-- Inventory counts
-- Leaderboards (but see below)
-
 ### Real-time leaderboards — special case
-A real-time quiz leaderboard needs every user to see the same score immediately. But you don't achieve this through database-level strong consistency (too slow globally). Instead:
+Needs every user to see the same score immediately globally.
 
 **Pattern:** Eventual consistency at DB layer + real-time messaging layer on top
 1. Score update → write to Redis (fast in-memory store)
@@ -128,7 +185,7 @@ Result: Users see consistent real-time state through messaging, not through DB s
 ## 4. Transactions and ACID
 
 ### ACID properties
-- **Atomicity**: All operations in a transaction succeed, or all fail (no partial writes)
+- **Atomicity**: All operations succeed, or all fail — no partial writes
 - **Consistency**: Data remains valid before and after transaction
 - **Isolation**: Concurrent transactions don't interfere with each other
 - **Durability**: Committed writes survive crashes
@@ -164,10 +221,10 @@ No locks. Execute operations independently:
 2. Credit account B (shard 2) immediately
 3. If step 2 fails → trigger a compensating transaction to reverse step 1
 
-Trade-off: More complex to implement, temporary inconsistency possible, but no blocking.
+Trade-off: More complex, temporary inconsistency possible, but no blocking.
 
 **When to use which:**
-- Banking / payments: 2PC acceptable (transaction volumes are lower, correctness is paramount)
+- Banking / payments: 2PC acceptable (lower transaction volumes, correctness is paramount)
 - High-scale distributed systems: compensating transactions (throughput > locking overhead)
 
 ---
@@ -212,22 +269,27 @@ Pre-computed aggregates stored as a separate table, refreshed periodically.
 |---|---|
 | Write throughput bottleneck | Sharding |
 | Read throughput bottleneck | Read replicas |
-| Hot shard | Secondary shard key on that shard OR read replicas OR caching |
+| Hot shard | Secondary shard key OR read replicas OR caching |
 | Scatter-gather on non-shard-key queries | Denormalized index table |
 | Cross-shard atomic operations | 2PC (low scale) or compensating transactions (high scale) |
 | Expensive aggregate queries | Materialized views |
 | Geographic read latency | Geo-distributed replicas + edge caching |
+| Primary database goes down | Leader election (Raft) → replica promoted to primary |
+| Uneven data distribution on resharding | Consistent hashing |
+| Write conflicts across primaries | Multi-primary replication with conflict resolution |
 
 ---
 
 ## Concept Relationships
 
 ```
-Write scale    → Sharding (distribute writes across primaries)
-Read scale     → Replication (replicas per shard primary)
-Correctness    → Transactions + ACID (2PC or compensating)
-Query speed    → Denormalization + Materialized views
-Consistency    → Strong (slow, safe) vs Eventual (fast, tolerant)
+Write scale      → Sharding (distribute writes across primaries)
+Read scale       → Replication (replicas per shard primary)
+Resharding       → Consistent hashing (minimize data movement)
+Failover         → Leader election (Raft) — auto-promote replica
+Correctness      → Transactions + ACID (2PC or compensating)
+Query speed      → Denormalization + Materialized views
+Consistency      → Strong (slow, safe) vs Eventual (fast, tolerant)
 ```
 
-All five concepts work together. In a real system you use all of them.
+All concepts work together. In a real system you use all of them.
